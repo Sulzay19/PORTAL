@@ -79,6 +79,21 @@
   .type-help{font-size:13px;color:#4A5D57;margin:12px 0 0;line-height:1.5;}
   .hint{font-size:11.5px;color:#7B8B85;margin-top:2px;}
   #existingPanel{display:none;}
+  .assess-card{max-width:440px;margin:22px auto 0;text-align:left;background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
+  .assess-card.hidden{display:none;}
+  .assess-head{background:var(--teal);color:var(--parchment);padding:11px 16px;font-family:'Lora',serif;font-size:15px;font-weight:600;}
+  .assess-body{padding:4px 16px 10px;}
+  .assess-row{padding:10px 0;border-bottom:1px solid #EEF2EE;}
+  .assess-row:last-of-type{border-bottom:none;}
+  .assess-row small{display:block;color:#5A6B65;font-size:11.5px;}
+  .assess-row b{font-size:14px;color:var(--ink);}
+  .assess-row em{display:block;font-style:normal;color:#5A6B65;font-size:12px;margin-top:2px;}
+  .assess-notice{border:2px solid var(--teal);border-radius:8px;background:var(--sage-tint);padding:10px 12px;margin:6px 0 4px;font-size:13px;line-height:1.5;color:var(--ink);}
+  .assess-notice strong{display:block;color:var(--teal-deep);font-size:13.5px;margin-bottom:3px;}
+  .assess-tip{background:var(--gold-tint);color:#6E4F10;font-size:13px;line-height:1.5;padding:10px 16px;}
+  .assess-actions{max-width:440px;margin:16px auto 0;}
+  .assess-actions.hidden{display:none;}
+  .assess-note{font-size:12px;color:#7B8B85;margin-top:8px;text-align:center;}
 </style>
 </head>
 <body>
@@ -165,6 +180,21 @@
   <div class="confirm hidden" id="confirmWrap">
     <h2>Jazakumullahu Khairan!</h2>
     <p><span id="confirmPre"></span><b id="confirmName"></b><span id="confirmPost"></span></p>
+
+    <div class="assess-card hidden" id="assessCard">
+      <div class="assess-head">Hifz Assessment Details</div>
+      <div class="assess-body">
+        <div class="assess-row"><small>Assessment dates</small><b id="as_dates"></b></div>
+        <div class="assess-row"><small>Portion to memorise by heart</small><b id="as_portion"></b></div>
+        <div class="assess-row"><small>Pages and verses</small><b id="as_pages"></b><em id="as_mushaf"></em></div>
+        <div class="assess-notice"><strong>This portion is for memorisation (Hifz)</strong>It is not a Nazirah (reading) portion. Your child must learn these pages by heart and recite them <b>from memory</b> on the assessment day.</div>
+      </div>
+      <div class="assess-tip">Help your child memorise a little every day. Their Qur'an reading will also be checked on the day.</div>
+    </div>
+    <div class="assess-actions hidden" id="assessActions">
+      <button class="btn" id="downloadBtn" onclick="downloadAssessment()">Download these details</button>
+      <p class="assess-note">Saves an image to your phone. For any questions, contact the office on 012 374 4647.</p>
+    </div>
   </div>
 </main>
 
@@ -201,13 +231,22 @@
   let genderVal = "";
   let typeVal = "new";
 
+  // ⬇ Hifz assessment details shown to NEW learners after they apply — update these each year ⬇
+  const ASSESSMENT = {
+    dates:   "17 and 18 November 2026",
+    portion: "Para 1 — last quarter",
+    pages:   "Pages 23 to 28  ·  Verses 113 to 141",
+    mushaf:  "13-line Qur'an"
+  };
+  let lastLearnerName = "";
+
   function setGender(val){
     genderVal = val;
     document.querySelectorAll("#p_genderToggle button").forEach(b=>b.classList.toggle("active", b.dataset.val===val));
   }
 
   const TYPE_TEXT = {
-    "new": "Applying for a place for the first time? Our admissions team will contact you to arrange an assessment.",
+    "new": "Applying for a place for the first time? After you submit, you will see the assessment date and the portion your child must memorise.",
     "existing": "Already a learner in the Hifz Program? Please fill in their details and how much they have memorized. No assessment is needed — the school will place them in their class."
   };
 
@@ -298,8 +337,9 @@
       } else {
         document.getElementById("confirmPre").textContent = "Your application for ";
         document.getElementById("confirmName").textContent = name;
-        document.getElementById("confirmPost").textContent = " has been received. Our admissions team will contact you to arrange an assessment.";
+        document.getElementById("confirmPost").textContent = " has been received. Please take note of the assessment details below.";
       }
+      showAssessment(typeVal === "new", name);
       document.getElementById("formWrap").classList.add("hidden");
       document.getElementById("confirmWrap").classList.remove("hidden");
     }).catch(err=>{
@@ -308,6 +348,134 @@
       btn.disabled = false;
       btn.textContent = typeVal === "existing" ? "Submit Details" : "Submit Application";
     });
+  }
+
+  function showAssessment(show, name){
+    lastLearnerName = name;
+    document.getElementById("as_dates").textContent = ASSESSMENT.dates;
+    document.getElementById("as_portion").textContent = ASSESSMENT.portion;
+    document.getElementById("as_pages").textContent = ASSESSMENT.pages;
+    document.getElementById("as_mushaf").textContent = ASSESSMENT.mushaf;
+    document.getElementById("assessCard").classList.toggle("hidden", !show);
+    document.getElementById("assessActions").classList.toggle("hidden", !show);
+  }
+
+  function wrapLines(ctx, text, maxW){
+    const words = text.split(" "); const lines = []; let line = "";
+    words.forEach(w=>{
+      const test = line ? line + " " + w : w;
+      if(ctx.measureText(test).width > maxW && line){ lines.push(line); line = w; } else { line = test; }
+    });
+    if(line) lines.push(line);
+    return lines;
+  }
+
+  function roundRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  }
+
+  async function downloadAssessment(){
+    const btn = document.getElementById("downloadBtn");
+    btn.disabled = true; btn.textContent = "Preparing image…";
+    try{
+      if(document.fonts && document.fonts.ready) await document.fonts.ready;
+      const W = 720, S = 2, pad = 40, inner = W - pad*2;
+      const SERIF = "'Lora', Georgia, serif", SANS = "'Inter', Arial, sans-serif";
+      const measure = document.createElement("canvas").getContext("2d");
+      measure.font = "15px " + SANS;
+      const noticeLines = wrapLines(measure, "It is not a Nazirah (reading) portion. Your child must learn these pages by heart and recite them from memory on the assessment day.", inner - 76);
+      const tipLines = wrapLines(measure, "Help your child memorise a little every day. Their Qur'an reading will also be checked on the day.", inner - 76);
+      measure.font = "bold 22px " + SERIF;
+      const nameLines = wrapLines(measure, lastLearnerName || "", inner);
+      const nH = 54 + noticeLines.length*22;
+      const tH = 22 + tipLines.length*22;
+      const cardTopPre = 264 + nameLines.length*28;
+      const cardHPre = 20 + 236 + nH + 20 + tH + 20;
+      const H = cardTopPre + cardHPre + 110;
+
+      const cv = document.createElement("canvas");
+      cv.width = W*S; cv.height = H*S;
+      const ctx = cv.getContext("2d");
+      ctx.scale(S,S);
+      ctx.fillStyle = "#FAF7F0"; ctx.fillRect(0,0,W,H);
+
+      // Header band with logo
+      ctx.fillStyle = "#123B3A"; ctx.fillRect(0,0,W,130);
+      const logoEl = document.querySelector("header.app-header img");
+      let tx = pad;
+      if(logoEl && logoEl.complete && logoEl.naturalWidth){
+        const lh = 86, lw = lh * logoEl.naturalWidth / logoEl.naturalHeight;
+        ctx.drawImage(logoEl, pad, 22, lw, lh); tx = pad + lw + 20;
+      }
+      ctx.fillStyle = "#FAF7F0"; ctx.font = "bold 26px " + SERIF; ctx.fillText("Central Islamic School", tx, 60);
+      ctx.fillStyle = "#A9C4B8"; ctx.font = "16px " + SANS; ctx.fillText("Hifz-ul-Qur'an Program", tx, 88);
+
+      let y = 180;
+      ctx.fillStyle = "#0C2928"; ctx.font = "bold 28px " + SERIF; ctx.fillText("Hifz Assessment Details", pad, y);
+      y += 40;
+      ctx.fillStyle = "#5A6B65"; ctx.font = "15px " + SANS; ctx.fillText("Learner", pad, y);
+      y += 30;
+      ctx.fillStyle = "#1C2B28"; ctx.font = "bold 22px " + SERIF;
+      nameLines.forEach(l=>{ ctx.fillText(l, pad, y); y += 28; });
+      y += 14;
+
+      // Card
+      const cardTop = y;
+      const cardH = cardHPre;
+      ctx.fillStyle = "#FFFFFF"; roundRect(ctx, pad, cardTop, inner, cardH, 12); ctx.fill();
+      ctx.strokeStyle = "#DDE4DE"; ctx.lineWidth = 1.5; ctx.stroke();
+
+      y = cardTop + 20;
+      const rows = [
+        ["Assessment dates", ASSESSMENT.dates, ""],
+        ["Portion to memorise by heart", ASSESSMENT.portion, ""],
+        ["Pages and verses", ASSESSMENT.pages, ASSESSMENT.mushaf]
+      ];
+      rows.forEach((r,i)=>{
+        ctx.fillStyle = "#5A6B65"; ctx.font = "14px " + SANS; ctx.fillText(r[0], pad+20, y+16);
+        ctx.fillStyle = "#1C2B28"; ctx.font = "bold 20px " + SANS; ctx.fillText(r[1], pad+20, y+44);
+        if(r[2]){ ctx.fillStyle = "#5A6B65"; ctx.font = "14px " + SANS; ctx.fillText(r[2], pad+20, y+66); }
+        y += r[2] ? 92 : 72;
+        if(i < rows.length-1){ ctx.fillStyle = "#EEF2EE"; ctx.fillRect(pad+20, y-10, inner-40, 1.5); }
+      });
+
+      // Memorisation notice
+      ctx.fillStyle = "#E8EFE9"; roundRect(ctx, pad+20, y, inner-40, nH, 8); ctx.fill();
+      ctx.strokeStyle = "#123B3A"; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.fillStyle = "#0C2928"; ctx.font = "bold 17px " + SANS; ctx.fillText("This portion is for memorisation (Hifz)", pad+36, y+30);
+      ctx.fillStyle = "#1C2B28"; ctx.font = "15px " + SANS;
+      noticeLines.forEach((l,i)=> ctx.fillText(l, pad+36, y+56+i*22));
+      y += nH + 20;
+
+      // Tip
+      ctx.fillStyle = "#F1E4C6"; roundRect(ctx, pad+20, y, inner-40, tH, 8); ctx.fill();
+      ctx.fillStyle = "#6E4F10"; ctx.font = "15px " + SANS;
+      tipLines.forEach((l,i)=> ctx.fillText(l, pad+36, y+28+i*22));
+
+      // Footer
+      y = cardTop + cardH + 44;
+      ctx.fillStyle = "#1C2B28"; ctx.font = "bold 15px " + SANS;
+      ctx.fillText("Central Islamic School", pad, y);
+      ctx.fillStyle = "#5A6B65"; ctx.font = "14px " + SANS;
+      ctx.fillText("330 Turquoise Street, Laudium, Pretoria, 0037", pad, y+22);
+      ctx.fillText("012 374 4647  ·  info@centralislamicschool.co.za", pad, y+44);
+
+      const blob = await new Promise(res=>cv.toBlob(res, "image/png"));
+      const safe = (lastLearnerName || "Learner").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const fileName = "Hifz-Assessment-" + safe + ".png";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+      btn.textContent = "Downloaded ✓ — tap to download again";
+    } catch(err){
+      console.error(err);
+      btn.textContent = "Couldn't download — please take a screenshot instead";
+    }
+    btn.disabled = false;
   }
 
   setType("new");
