@@ -198,13 +198,13 @@
       <div class="assess-tip">Help your child memorise a little every day. Their Qur'an reading will also be checked on the day.</div>
     </div>
     <div class="assess-actions hidden" id="assessActions">
-      <button class="btn" id="downloadBtn" onclick="downloadAssessment()">Download these details</button>
-      <button class="btn assess-btn2" id="shareBtn" onclick="shareAssessment()" style="display:none;">Share or save to WhatsApp</button>
       <div class="assess-preview" id="assessPreview">
-        <p><b>If the image did not save:</b> press and hold the picture below and choose <b>Download image</b> or <b>Save image</b>. If that option doesn't appear, take a screenshot of it.</p>
+        <p><b>Keep these details:</b> press and hold the picture below and choose <b>Download image</b> or <b>Save image</b>. If that option doesn't appear, take a screenshot.</p>
         <img id="assessImg" alt="Hifz assessment details for your child">
       </div>
-      <p class="assess-note">Saves an image to your phone. For any questions, contact the office on 012 374 4647.</p>
+      <button class="btn" id="downloadBtn" onclick="downloadAssessment()" style="margin-top:14px;">Download picture</button>
+      <button class="btn assess-btn2" id="shareBtn" onclick="shareAssessment()" style="display:none;">Share or save to WhatsApp</button>
+      <p class="assess-note">For any questions, contact the office on 012 374 4647.</p>
     </div>
   </div>
 </main>
@@ -369,6 +369,26 @@
     document.getElementById("as_mushaf").textContent = ASSESSMENT.mushaf;
     document.getElementById("assessCard").classList.toggle("hidden", !show);
     document.getElementById("assessActions").classList.toggle("hidden", !show);
+    if(show) autoShowPicture();
+  }
+
+  // Build the picture straight after submitting and show it in place of the card,
+  // so parents can press-and-hold to save it — no download needed (works in WhatsApp / in-app browsers)
+  async function autoShowPicture(){
+    try{
+      await buildAssessmentImage();
+      document.getElementById("assessImg").src = assessDataUrl;
+      document.getElementById("assessPreview").classList.add("show");
+      document.getElementById("assessCard").classList.add("hidden");
+      try{
+        const file = new File([assessBlob], assessFileName, {type:"image/png"});
+        if(navigator.canShare && navigator.canShare({files:[file]})){
+          document.getElementById("shareBtn").style.display = "block";
+        }
+      } catch(e){}
+    } catch(err){
+      console.warn("Picture could not be created; the details card stays visible.", err);
+    }
   }
 
   function wrapLines(ctx, text, maxW){
@@ -412,8 +432,8 @@
           document.getElementById("shareBtn").style.display = "block";
         }
       } catch(e){}
-      btn.textContent = "Download again";
-      document.getElementById("assessPreview").scrollIntoView({behavior:"smooth", block:"start"});
+      document.getElementById("assessCard").classList.add("hidden");
+      btn.textContent = "Download picture";
     } catch(err){
       console.error(err);
       btn.textContent = "Couldn't create the image — please take a screenshot instead";
