@@ -1,0 +1,42 @@
+FIREBASE RULES - PARENT PORTAL OPEN / CLOSED
+Firebase console > hifz-admissions > Firestore Database > Rules
+
+Make 3 changes to your rules, then press Publish.
+Keep everything else exactly as it is.
+
+----------------------------------------------------------------------
+1) Add this function just inside the line
+      match /databases/{database}/documents {
+----------------------------------------------------------------------
+
+    function portalOpen() {
+      return !exists(/databases/$(database)/documents/portalSettings/main)
+        || (get(/databases/$(database)/documents/portalSettings/main).data.open == true
+            && request.time < get(/databases/$(database)/documents/portalSettings/main).data.closeAt);
+    }
+
+----------------------------------------------------------------------
+2) In your  match /applications/{appId}  block, find the line that
+   starts with  allow create:  and add   && portalOpen()   to it.
+
+   For example, if it says:
+      allow create: if true;
+   change it to:
+      allow create: if true && portalOpen();
+
+   If it already has other checks, keep them and add  && portalOpen()
+   just before the semicolon.
+----------------------------------------------------------------------
+
+----------------------------------------------------------------------
+3) Add this new block (next to the applications block):
+----------------------------------------------------------------------
+
+    match /portalSettings/{doc} {
+      allow read: if true;
+      allow write: if SAME_CHECK_AS_YOUR_ADMIN_STATE_BLOCK;
+    }
+
+   Replace  SAME_CHECK_AS_YOUR_ADMIN_STATE_BLOCK  with the exact check
+   your  match /adminState/{doc}  block uses for "allow write"
+   (the one that lets only your own login write).

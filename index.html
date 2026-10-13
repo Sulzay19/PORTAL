@@ -100,6 +100,13 @@
   .assess-preview p{font-size:13px;color:var(--ink);background:var(--gold-tint);border-radius:8px;padding:10px 12px;line-height:1.5;margin:0 0 10px;text-align:left;}
   .assess-preview img{width:100%;border:1px solid var(--line);border-radius:8px;display:block;}
   .assess-note{font-size:12px;color:#7B8B85;margin-top:8px;text-align:center;}
+  /* Open / Closed switch (set in the Admin app) */
+  .hidden{display:none !important;}
+  .open-banner{background:var(--sage-tint);border:1px solid var(--sage);color:var(--teal-deep);border-radius:var(--radius);padding:12px 16px;font-size:14.5px;font-weight:600;text-align:center;margin-bottom:18px;}
+  .closed-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:34px 22px;text-align:center;margin:10px 0 18px;}
+  .closed-card h2{font-size:24px;margin-bottom:14px;}
+  .closed-card p{font-size:16px;line-height:1.6;color:var(--ink);margin:0 0 10px;}
+  .portal-wait{text-align:center;color:#4A5D57;font-size:14px;padding:30px 0;}
 </style>
 </head>
 <body>
@@ -113,13 +120,21 @@
 </header>
 
 <main>
-  <p class="intro">Please complete this form for the Hifz Program. This page does not give access to any school records — it only sends your details to the school.</p>
+  <p class="intro" id="introText">Please complete this form for the Hifz Program. This page does not give access to any school records — it only sends your details to the school.</p>
 
   <div class="setup-warning" id="setupWarning" style="display:none;">
     This form isn't connected yet — please let the school know so they can finish setting it up (a Firebase project config needs to be pasted in near the top of this file).
   </div>
 
-  <div id="formWrap">
+  <div class="portal-wait" id="portalWait">Loading…</div>
+  <div class="closed-card hidden" id="closedWrap">
+    <h2>Assalamu Alaikum</h2>
+    <p>Applications for the Hifz Program are now closed.</p>
+    <p>JazakAllahu Khairan.</p>
+  </div>
+  <div class="open-banner hidden" id="openBanner"></div>
+
+  <div id="formWrap" class="hidden">
     <div class="msg error" id="formError"></div>
 
     <div class="panel">
@@ -239,6 +254,54 @@
     document.getElementById("setupWarning").style.display = "block";
   }
 
+
+  /* ---------- Open / Closed (switch in the Admin app, Admissions > Applications) ----------
+     portalSettings/main = {open: true|false, closeDate: "YYYY-MM-DD", closeAt: Timestamp}.
+     The portal closes by itself at the end of the closing day (South African time).
+     If the setting can't be read, the form is shown as before; the cloud rules still decide. */
+  const PORTAL_MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  const PORTAL_DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  let portalCloseAt = null;
+  function portalLongDate(iso){
+    const p = String(iso || "").split("-").map(Number);
+    if(p.length !== 3 || !p[0]) return "";
+    const d = new Date(p[0], p[1] - 1, p[2]);
+    return PORTAL_DAYS[d.getDay()] + ", " + d.getDate() + " " + PORTAL_MONTHS[d.getMonth()] + " " + d.getFullYear();
+  }
+  function portalEndOfDay(iso){ return /^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? new Date(iso + "T23:59:59+02:00").getTime() : null; }
+  function portalShow(state, closeDate){
+    document.getElementById("portalWait").classList.add("hidden");
+    const closed = state === "closed";
+    document.getElementById("closedWrap").classList.toggle("hidden", !closed);
+    document.getElementById("formWrap").classList.toggle("hidden", closed);
+    document.getElementById("introText").classList.toggle("hidden", closed);
+    const banner = document.getElementById("openBanner");
+    if(state === "open" && closeDate){
+      banner.textContent = "Applications are open until " + portalLongDate(closeDate) + ".";
+      banner.classList.remove("hidden");
+    } else banner.classList.add("hidden");
+    if(closed){ document.getElementById("confirmWrap").classList.add("hidden"); }
+  }
+  function portalIsClosedNow(){ return portalCloseAt !== null && Date.now() > portalCloseAt; }
+  function portalCheck(){
+    if(!fbDB){ portalShow("unknown"); return; }
+    fbDB.collection("portalSettings").doc("main").get().then(function(doc){
+      const d = doc.exists ? (doc.data() || {}) : null;
+      if(!d){ portalShow("unknown"); return; }          // never set yet: works as before
+      portalCloseAt = portalEndOfDay(d.closeDate);
+      if(d.open !== true || portalIsClosedNow()) portalShow("closed");
+      else portalShow("open", d.closeDate);
+    }).catch(function(err){
+      console.warn("Could not read the portal setting:", err);
+      portalShow("unknown");
+    });
+  }
+  // if the page is left open past the closing time, close it
+  setInterval(function(){
+    if(portalIsClosedNow() && document.getElementById("confirmWrap").classList.contains("hidden")) portalShow("closed");
+  }, 60000);
+  portalCheck();
+
   let genderVal = "";
   let typeVal = "new";
 
@@ -287,6 +350,7 @@
   }
 
   function submitApplication(){
+    if(portalIsClosedNow()){ portalShow("closed"); return; }
     const errEl = document.getElementById("formError");
     errEl.style.display = "none";
 
@@ -355,6 +419,17 @@
       document.getElementById("confirmWrap").classList.remove("hidden");
     }).catch(err=>{
       console.error(err);
+      if(err && err.code === "permission-denied"){
+        // the cloud refused it: most likely the portal has just closed
+        fbDB.collection("portalSettings").doc("main").get().then(function(doc){
+          const d = doc.exists ? (doc.data() || {}) : null;
+          if(d && (d.open !== true || (portalEndOfDay(d.closeDate) !== null && Date.now() > portalEndOfDay(d.closeDate)))) portalShow("closed");
+          else showError("Your application could not be sent. Please try again, or contact the office on 012 374 4647.");
+        }).catch(function(){ showError("Your application could not be sent. Please try again, or contact the office on 012 374 4647."); });
+        btn.disabled = false;
+        btn.textContent = typeVal === "existing" ? "Submit Details" : "Submit Application";
+        return;
+      }
       showError("Something went wrong submitting your application: " + err.message);
       btn.disabled = false;
       btn.textContent = typeVal === "existing" ? "Submit Details" : "Submit Application";
